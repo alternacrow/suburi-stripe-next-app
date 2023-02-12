@@ -23,6 +23,42 @@ export const stripeRouter = createTRPCRouter({
       products: products.data,
     };
   }),
+  cancelSubscriptionAtPeriodEnd: publicProcedure
+    .input(z.object({ appUserId: z.string() }))
+    .mutation(async ({ input: { appUserId } }) => {
+      const searchedCus = await stripe.customers.search({
+        query: `name:"${appUserId}"`,
+        expand: ["data.subscriptions"],
+      });
+      const customer = searchedCus.data[0];
+      const subscriptions = customer?.subscriptions?.data ?? [];
+
+      await Promise.all(
+        subscriptions.map((subscription) => {
+          return stripe.subscriptions.update(subscription.id, {
+            cancel_at_period_end: true,
+          });
+        })
+      );
+    }),
+  continueSubscription: publicProcedure
+    .input(z.object({ appUserId: z.string() }))
+    .mutation(async ({ input: { appUserId } }) => {
+      const searchedCus = await stripe.customers.search({
+        query: `name:"${appUserId}"`,
+        expand: ["data.subscriptions"],
+      });
+      const customer = searchedCus.data[0];
+      const subscriptions = customer?.subscriptions?.data ?? [];
+
+      await Promise.all(
+        subscriptions.map((subscription) => {
+          return stripe.subscriptions.update(subscription.id, {
+            cancel_at_period_end: false,
+          });
+        })
+      );
+    }),
   createCheckoutSession: publicProcedure
     .input(
       z.object({

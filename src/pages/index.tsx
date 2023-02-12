@@ -24,18 +24,27 @@ const Home: NextPage = () => {
     appUserId,
   });
   const productsQuery = api.stripe.products.useQuery();
-  const mutation = api.stripe.createCheckoutSession.useMutation();
+  const createCheckoutSessionMutation =
+    api.stripe.createCheckoutSession.useMutation();
+  const cancelSubscriptionAtPeriodEndMutation =
+    api.stripe.cancelSubscriptionAtPeriodEnd.useMutation();
+  const continueSubscriptionMutation =
+    api.stripe.continueSubscription.useMutation();
 
   const customer = useMemo(
     () => customerQuery.data?.customer,
     [customerQuery.data?.customer]
+  );
+  const subscription = useMemo(
+    () => customer?.subscriptions?.data[0],
+    [customer?.subscriptions?.data]
   );
   const products = useMemo(
     () => productsQuery.data?.products ?? [],
     [productsQuery.data?.products]
   );
 
-  const handleClick = useCallback(
+  const selectProduct = useCallback(
     (product: Stripe.Product) => {
       const priceId = product.default_price;
 
@@ -43,19 +52,40 @@ const Home: NextPage = () => {
         throw new Error("Requires appUserId and priceId");
       }
 
-      mutation.mutate({
+      createCheckoutSessionMutation.mutate({
         appUserId,
         priceId: typeof priceId === "string" ? priceId : priceId.id,
       });
     },
-    [appUserId, mutation]
+    [appUserId, createCheckoutSessionMutation]
   );
 
+  const handleClickContinueSubscription = useCallback(() => {
+    continueSubscriptionMutation.mutate(
+      { appUserId },
+      {
+        onSuccess: () => void customerQuery.refetch(),
+      }
+    );
+  }, [appUserId, continueSubscriptionMutation, customerQuery]);
+
+  const handleClickCancelSubscription = useCallback(() => {
+    cancelSubscriptionAtPeriodEndMutation.mutate(
+      { appUserId },
+      {
+        onSuccess: () => void customerQuery.refetch(),
+      }
+    );
+  }, [appUserId, cancelSubscriptionAtPeriodEndMutation, customerQuery]);
+
   useEffect(() => {
-    if (mutation.data?.checkoutSessionUrl) {
-      window.location.href = mutation.data?.checkoutSessionUrl;
+    if (createCheckoutSessionMutation.data?.checkoutSessionUrl) {
+      window.location.href =
+        createCheckoutSessionMutation.data?.checkoutSessionUrl;
     }
-  }, [mutation.data?.checkoutSessionUrl]);
+  }, [createCheckoutSessionMutation.data?.checkoutSessionUrl]);
+
+  console.log(subscription);
 
   return (
     <>
@@ -81,9 +111,20 @@ const Home: NextPage = () => {
           })}
         </select>
 
-        {customer?.subscriptions?.data.length ? (
+        {subscription ? (
           <div style={{ marginLeft: 40 }}>
             <p style={{ color: "red" }}>Already has subscriptions</p>
+            <p>
+              current_period_start:{" "}
+              {new Date(subscription.current_period_start).toISOString()}
+            </p>
+            <p>
+              current_period_end:{" "}
+              {new Date(subscription.current_period_end).toISOString()}
+            </p>
+            <p>
+              cancel_at_period_end: {String(subscription.cancel_at_period_end)}
+            </p>
           </div>
         ) : null}
 
@@ -98,7 +139,7 @@ const Home: NextPage = () => {
               >
                 <button
                   type="button"
-                  onClick={() => handleClick(product)}
+                  onClick={() => selectProduct(product)}
                   style={{
                     border: "1px solid gray",
                     padding: "0 16px",
@@ -113,6 +154,34 @@ const Home: NextPage = () => {
             );
           })}
         </ul>
+
+        {!subscription ? null : subscription.cancel_at_period_end ? (
+          <button
+            type="button"
+            onClick={handleClickContinueSubscription}
+            style={{
+              marginLeft: 40,
+              border: "1px solid gray",
+              padding: "16px",
+              cursor: "pointer",
+            }}
+          >
+            Continue Subscription
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleClickCancelSubscription}
+            style={{
+              marginLeft: 40,
+              border: "1px solid gray",
+              padding: "16px",
+              cursor: "pointer",
+            }}
+          >
+            Cancel Subscription
+          </button>
+        )}
       </main>
     </>
   );
