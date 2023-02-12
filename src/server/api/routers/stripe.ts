@@ -3,6 +3,19 @@ import { createTRPCRouter, publicProcedure } from "../trpc";
 import { stripe } from "../../stripe/client";
 
 export const stripeRouter = createTRPCRouter({
+  customer: publicProcedure
+    .input(z.object({ appUserId: z.string() }))
+    .query(async ({ input: { appUserId } }) => {
+      const searchedCus = await stripe.customers.search({
+        query: `name:"${appUserId}"`,
+        expand: ["data.subscriptions"],
+      });
+      const customer = searchedCus.data[0];
+
+      return {
+        customer,
+      };
+    }),
   products: publicProcedure.query(async () => {
     const products = await stripe.products.list();
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { NextPage } from "next";
 import Head from "next/head";
@@ -6,17 +6,37 @@ import type Stripe from "stripe";
 
 import { api } from "../utils/api";
 
-const APP_USER_ID_LIST = ["test_1", "test_2", "test_3", "test_4"];
+const APP_USER_ID_1 = "test_1";
+const APP_USER_ID_2 = "test_2";
+const APP_USER_ID_3 = "test_3";
+const APP_USER_ID_4 = "test_4";
+const APP_USER_ID_LIST: string[] = [
+  APP_USER_ID_1,
+  APP_USER_ID_2,
+  APP_USER_ID_3,
+  APP_USER_ID_4,
+];
 
 const Home: NextPage = () => {
-  const appUserIdSelectRef = useRef<HTMLSelectElement>(null);
+  const [appUserId, setAppUserId] = useState(APP_USER_ID_1);
 
-  const { data } = api.stripe.products.useQuery();
+  const customerQuery = api.stripe.customer.useQuery({
+    appUserId,
+  });
+  const productsQuery = api.stripe.products.useQuery();
   const mutation = api.stripe.createCheckoutSession.useMutation();
+
+  const customer = useMemo(
+    () => customerQuery.data?.customer,
+    [customerQuery.data?.customer]
+  );
+  const products = useMemo(
+    () => productsQuery.data?.products ?? [],
+    [productsQuery.data?.products]
+  );
 
   const handleClick = useCallback(
     (product: Stripe.Product) => {
-      const appUserId = appUserIdSelectRef.current?.value;
       const priceId = product.default_price;
 
       if (!appUserId || !priceId) {
@@ -28,7 +48,7 @@ const Home: NextPage = () => {
         priceId: typeof priceId === "string" ? priceId : priceId.id,
       });
     },
-    [mutation]
+    [appUserId, mutation]
   );
 
   useEffect(() => {
@@ -47,9 +67,9 @@ const Home: NextPage = () => {
       <main style={{ padding: "16px 0" }}>
         <p style={{ marginLeft: 40 }}>Email</p>
         <select
-          ref={appUserIdSelectRef}
           size={APP_USER_ID_LIST.length}
-          defaultValue={APP_USER_ID_LIST[0]}
+          value={appUserId}
+          onChange={(e) => setAppUserId(e.target.value)}
           style={{ marginLeft: 40, padding: 8, fontSize: 16 }}
         >
           {APP_USER_ID_LIST.map((appUserId, i) => {
@@ -61,8 +81,14 @@ const Home: NextPage = () => {
           })}
         </select>
 
+        {customer?.subscriptions?.data.length ? (
+          <div style={{ marginLeft: 40 }}>
+            <p style={{ color: "red" }}>Already has subscriptions</p>
+          </div>
+        ) : null}
+
         <ul style={{ listStyleType: "none" }}>
-          {data?.products.map((product) => {
+          {products.map((product) => {
             return (
               <li
                 key={product.id}
