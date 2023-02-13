@@ -1,6 +1,7 @@
 import { createTRPCRouter } from "./trpc";
 import { exampleRouter } from "./routers/example";
 import { stripeRouter } from "./routers/stripe";
+import { revenueCatRouter } from "./routers/revenue-cat";
 
 /**
  * This is the primary router for your server.
@@ -10,6 +11,7 @@ import { stripeRouter } from "./routers/stripe";
 export const appRouter = createTRPCRouter({
   example: exampleRouter,
   stripe: stripeRouter,
+  revenueCat: revenueCatRouter,
 });
 
 // export type definition of API

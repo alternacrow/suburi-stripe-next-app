@@ -9,6 +9,7 @@ const server = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]),
   DOMAIN: z.string(),
   STRIPE_SECRET_KEY: z.string(),
+  REVENUECAT_STRIPE_APP_PUBLIC_API_KEY: z.string(),
 });
 
 /**
@@ -31,6 +32,8 @@ const processEnv = {
   DOMAIN: process.env.DOMAIN,
   STRIPE_PUBLIC_KEY: process.env.STRIPE_PUBLIC_KEY,
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
+  REVENUECAT_STRIPE_APP_PUBLIC_API_KEY:
+    process.env.REVENUECAT_STRIPE_APP_PUBLIC_API_KEY,
 };
 
 // Don't touch the part below

@@ -23,7 +23,7 @@ export const stripeRouter = createTRPCRouter({
       products: products.data,
     };
   }),
-  cancelSubscriptionAtPeriodEnd: publicProcedure
+  discontinueSubscription: publicProcedure
     .input(z.object({ appUserId: z.string() }))
     .mutation(async ({ input: { appUserId } }) => {
       const searchedCus = await stripe.customers.search({
@@ -59,6 +59,22 @@ export const stripeRouter = createTRPCRouter({
         })
       );
     }),
+  cancelSubscription: publicProcedure
+    .input(z.object({ appUserId: z.string() }))
+    .mutation(async ({ input: { appUserId } }) => {
+      const searchedCus = await stripe.customers.search({
+        query: `name:"${appUserId}"`,
+        expand: ["data.subscriptions"],
+      });
+      const customer = searchedCus.data[0];
+      const subscriptions = customer?.subscriptions?.data ?? [];
+
+      await Promise.all(
+        subscriptions.map((subscription) => {
+          return stripe.subscriptions.cancel(subscription.id);
+        })
+      );
+    }),
   createCheckoutSession: publicProcedure
     .input(
       z.object({
@@ -89,6 +105,7 @@ export const stripeRouter = createTRPCRouter({
 
       const session = await stripe.checkout.sessions.create({
         customer: customer.id,
+        client_reference_id: customer.id,
         mode: "subscription",
         line_items: [
           {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useState, useEffect } from "react";
 
 import type { NextPage } from "next";
 import Head from "next/head";
@@ -17,6 +17,9 @@ const APP_USER_ID_LIST: string[] = [
   APP_USER_ID_4,
 ];
 
+const sleep = async (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 const Home: NextPage = () => {
   const [appUserId, setAppUserId] = useState(APP_USER_ID_1);
 
@@ -26,57 +29,74 @@ const Home: NextPage = () => {
   const productsQuery = api.stripe.products.useQuery();
   const createCheckoutSessionMutation =
     api.stripe.createCheckoutSession.useMutation();
-  const cancelSubscriptionAtPeriodEndMutation =
-    api.stripe.cancelSubscriptionAtPeriodEnd.useMutation();
+  const discontinueSubscriptionMutation =
+    api.stripe.discontinueSubscription.useMutation();
   const continueSubscriptionMutation =
     api.stripe.continueSubscription.useMutation();
+  const cancelSubscriptionMutation =
+    api.stripe.cancelSubscription.useMutation();
 
-  const customer = useMemo(
-    () => customerQuery.data?.customer,
-    [customerQuery.data?.customer]
-  );
-  const subscription = useMemo(
-    () => customer?.subscriptions?.data[0],
-    [customer?.subscriptions?.data]
-  );
-  const products = useMemo(
-    () => productsQuery.data?.products ?? [],
-    [productsQuery.data?.products]
-  );
+  const relationsQuery = api.revenueCat.relations.useQuery({ appUserId });
+  const relateSubscriptionMutation =
+    api.revenueCat.relateSubscription.useMutation();
 
-  const selectProduct = useCallback(
-    (product: Stripe.Product) => {
-      const priceId = product.default_price;
+  const customer = customerQuery.data?.customer;
+  const subscription = customer?.subscriptions?.data[0];
+  const products = productsQuery.data?.products ?? [];
 
-      if (!appUserId || !priceId) {
-        throw new Error("Requires appUserId and priceId");
-      }
+  const relation = relationsQuery.data?.data;
 
-      createCheckoutSessionMutation.mutate({
+  const refetch = () => {
+    void sleep(1000).then(() => {
+      void customerQuery.refetch();
+      void relationsQuery.refetch();
+    });
+  };
+
+  const selectProduct = (product: Stripe.Product) => {
+    const priceId = product.default_price;
+
+    if (!appUserId || !priceId) {
+      throw new Error("Requires appUserId and priceId");
+    }
+
+    createCheckoutSessionMutation.mutate({
+      appUserId,
+      priceId: typeof priceId === "string" ? priceId : priceId.id,
+    });
+  };
+  const handleClickContinueSubscription = () => {
+    continueSubscriptionMutation.mutate({ appUserId }, { onSuccess: refetch });
+  };
+
+  const handleClickDiscontinueSubscription = () => {
+    discontinueSubscriptionMutation.mutate(
+      { appUserId },
+      { onSuccess: refetch }
+    );
+  };
+
+  const handleClickCancelSubscription = () => {
+    if (!appUserId) {
+      return;
+    }
+
+    cancelSubscriptionMutation.mutate({ appUserId }, { onSuccess: refetch });
+  };
+
+  const handleClickRelateSubscription = () => {
+    if (!appUserId || !subscription) {
+      return;
+    }
+
+    relateSubscriptionMutation.mutate(
+      {
         appUserId,
-        priceId: typeof priceId === "string" ? priceId : priceId.id,
-      });
-    },
-    [appUserId, createCheckoutSessionMutation]
-  );
-
-  const handleClickContinueSubscription = useCallback(() => {
-    continueSubscriptionMutation.mutate(
-      { appUserId },
-      {
-        onSuccess: () => void customerQuery.refetch(),
-      }
+        subscriptionId: subscription.id,
+      },
+      { onSuccess: refetch }
     );
-  }, [appUserId, continueSubscriptionMutation, customerQuery]);
-
-  const handleClickCancelSubscription = useCallback(() => {
-    cancelSubscriptionAtPeriodEndMutation.mutate(
-      { appUserId },
-      {
-        onSuccess: () => void customerQuery.refetch(),
-      }
-    );
-  }, [appUserId, cancelSubscriptionAtPeriodEndMutation, customerQuery]);
+  };
 
   useEffect(() => {
     if (createCheckoutSessionMutation.data?.checkoutSessionUrl) {
@@ -85,7 +105,7 @@ const Home: NextPage = () => {
     }
   }, [createCheckoutSessionMutation.data?.checkoutSessionUrl]);
 
-  console.log(subscription);
+  console.log(relationsQuery.data?.data);
 
   return (
     <>
@@ -111,17 +131,17 @@ const Home: NextPage = () => {
           })}
         </select>
 
+        {relation ? (
+          <div>
+            <p style={{ marginLeft: 40, whiteSpace: "pre-wrap" }}>
+              {JSON.stringify(relation.subscriber.subscriptions, null, 2)}
+            </p>
+          </div>
+        ) : null}
+
         {subscription ? (
           <div style={{ marginLeft: 40 }}>
             <p style={{ color: "red" }}>Already has subscriptions</p>
-            <p>
-              current_period_start:{" "}
-              {new Date(subscription.current_period_start).toISOString()}
-            </p>
-            <p>
-              current_period_end:{" "}
-              {new Date(subscription.current_period_end).toISOString()}
-            </p>
             <p>
               cancel_at_period_end: {String(subscription.cancel_at_period_end)}
             </p>
@@ -169,9 +189,38 @@ const Home: NextPage = () => {
             Continue Subscription
           </button>
         ) : (
+          <>
+            <button
+              type="button"
+              onClick={handleClickDiscontinueSubscription}
+              style={{
+                marginLeft: 40,
+                border: "1px solid gray",
+                padding: "16px",
+                cursor: "pointer",
+              }}
+            >
+              Discontinue Subscription
+            </button>
+            <button
+              type="button"
+              onClick={handleClickCancelSubscription}
+              style={{
+                marginLeft: 40,
+                border: "1px solid gray",
+                padding: "16px",
+                cursor: "pointer",
+              }}
+            >
+              Cancel Subscription
+            </button>
+          </>
+        )}
+
+        {subscription ? (
           <button
             type="button"
-            onClick={handleClickCancelSubscription}
+            onClick={handleClickRelateSubscription}
             style={{
               marginLeft: 40,
               border: "1px solid gray",
@@ -179,9 +228,9 @@ const Home: NextPage = () => {
               cursor: "pointer",
             }}
           >
-            Cancel Subscription
+            Relate Subscription
           </button>
-        )}
+        ) : null}
       </main>
     </>
   );
